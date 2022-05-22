@@ -2,6 +2,16 @@
 #include <cstring>
 #include "decls.hpp"
 
+Memory memory {};
+
+namespace Constants {
+  const Object nil = Object{memory.symbol("nil")};
+  const Object if_ = Object{memory.symbol("if")};
+  const Object let = Object{memory.symbol("let")};
+  const Object letrec = Object{memory.symbol("letrec")};
+  const Object quote = Object{memory.symbol("quote")};  
+}
+
 void type_error() {
   throw std::runtime_error("type error");
 }

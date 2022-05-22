@@ -343,3 +343,129 @@ struct VM {
     }
   }
 };
+
+struct Compiler {
+  Code code;
+
+  // compiles the expression
+  // initial op a_1 op a_2 op a_3 ... op a_n
+  // associated to the left
+  void compile_fold(std::uint8_t opcode,
+		    const Object& initial,
+		    const Object& lst) {
+    compile_constant(initial);
+    for (auto p = lst; p != SC::nil; p = p.cdr()) {
+      compile_expression(p.car());
+      code.push_instruction(opcode);
+    }
+  }
+
+  void compile_constant(const Object& o) {
+    code.push_instruction(n(OpCode::constant));
+    code.push_instruction(code.push_constant(o));
+  }
+
+  void compile_bin_op(std::uint8_t opcode,const Object& form) {
+    auto x = form.cdr().car();
+    auto y = form.cdr().cdr().car();
+    compile_expression(x);
+    compile_expression(y);
+    code.push_instruction(opcode);
+  }
+
+  void compile_if(const Object& form) {
+    auto bool_form = form.cdr().car();
+    auto then_form = form.cdr().cdr().car();
+    auto else_form = form.cdr().cdr().cdr().car();
+	
+    compile_expression(bool_form);
+    code.push_instruction(n(OpCode::jump_if_nil));
+    code.push_instruction(0);
+    // if bool_form was not nil, then then_location
+    // is the location where the then_form code starts
+    // after executing the jump_if_nil instruction
+    auto then_location = code.instructions.size();
+    compile_expression(then_form);
+    code.push_instruction(n(OpCode::jump));
+    code.push_instruction(0);
+    // if bool_form_was nil, then else_location is the
+    // location of the else_form code, and is where
+    // the jump_if_nil instruction should jump us to
+    auto else_location = code.instructions.size();
+    compile_expression(else_form);
+    auto end_location = code.instructions.size();
+
+    // Compute the distance to jump for the jump_if_nil instruction
+    auto jump1_distance = else_location-then_location;
+    if (jump1_distance > std::numeric_limits<uint8_t>::max()) {
+      throw std::runtime_error("jump is too big");
+    }
+    code.instructions[then_location-1] = jump1_distance;
+
+    // Compute the distance to jump for the jump instruction
+    auto jump2_distance = end_location-else_location;
+    if (jump2_distance > std::numeric_limits<uint8_t>::max()) {
+      throw std::runtime_error("jump is too big");
+    }
+    code.instructions[else_location-1] = jump2_distance;
+  }
+
+  std::unordered_map<std::string, std::uint8_t>
+  local_map;
+
+  int let_depth {0};
+
+  void compile_let(const Object& form) {
+    // if (let_depth == 0) {
+    //   code.push_instruction(n(OpCode::alloc));
+    //   auto curr_local_count = local_map.size();
+    //   auto alloc_size_location = code.instructions.size();
+    //   code.push_instruction(0);
+    // }
+    // ++let_depth;
+
+    // auto bindings = form.cdr().car();
+    // auto body = form.cdr().cdr().car();
+    // for (auto p = bindings; p != SC::nil; p = p.cdr()) {
+    //   auto binder = p.car();
+    //   auto body = p.cdr().car();
+    //   compile_expression(body);
+    // }
+    
+    // --let_depth;
+    // if (let_depth == 0) {
+    //   auto local_count = local_map.size()-curr_local_count;
+    //   code.push_instruction(n(OpCode::unalloc));
+      
+    // }
+  }
+			   
+  void compile_expression(const Object& form) {
+    if (form.is_number()) {
+      compile_constant(form);
+    } else if (form.is_symbol()) {
+	
+    } else if (form.is_cons()) {
+      const auto& car = form.car(); 
+      if (car == Object{SC::quote}) {
+	compile_constant(form.cdr().car());
+      } else if (car == Object{SC::add}) {
+	compile_fold(n(OpCode::add), Object{0.0}, form.cdr());
+      } else if (car == Object{SC::sub}) {
+	compile_fold(n(OpCode::sub), Object{0.0}, form.cdr());
+      } else if (car == Object{SC::mult}) {
+	compile_fold(n(OpCode::mult), Object{1.0}, form.cdr());
+      } else if (car == Object{SC::div}) {
+	compile_fold(n(OpCode::div), Object{1.0}, form.cdr());
+      } else if (car == SC::cons) {
+	compile_bin_op(n(OpCode::cons), form);
+      } else if (car == Object{SC::if_}) {
+	compile_if(form);
+      } else if (car == Object{SC::let}) {
+	compile_let(form);	
+      } else if (car == Object{SC::letrec}) {
+
+      }
+    }
+  }
+};

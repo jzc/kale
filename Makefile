@@ -5,9 +5,9 @@ LLVM_CXX_FLAGS!=$(LLVM_CONFIG) --cxxflags | sed 's/c++14/c++17/ ; s/-fno-excepti
 LLVM_LD_FLAGS!=$(LLVM_CONFIG) --ldflags --system-libs --libs core
 COMPILE_FLAGS:=-g $(LLVM_CXX_FLAGS)
 
-# all: kale object.o
+all: interface.o object.o parsing.o compiler.o kale
 
-test:
+test: test.cpp
 	clang++ $(COMPILE_FLAGS) test.cpp -o test
 
 interface.o: interface.ll
@@ -16,8 +16,18 @@ interface.o: interface.ll
 object.o: decls.hpp object.cpp
 	clang++ $(COMPILE_FLAGS) -c object.cpp
 
-parser.o: decls.hpp parser.cpp
-	clang++ $(COMPILE_FLAGS) -c parser.cpp
+parsing.o: decls.hpp parsing.cpp
+	clang++ $(COMPILE_FLAGS) -c parsing.cpp
+
+compiler.o: decls.hpp compiler.cpp
+	clang++ $(COMPILE_FLAGS) -c compiler.cpp
+
+kale: object.o parsing.o compiler.o
+	clang++ $(COMPILE_FLAGS) kale.cpp interface.o object.o parsing.o \
+	compiler.o $(LLVM_LD_FLAGS) -o kale
+
+# form.o: decls.hpp form.cpp
+# 	clang++ $(COMPILE_FLAGS) -c form.cpp
 
 # kale: kale.cpp
 # note: put the compiled file before the linker, otherwise a linker error occurs
@@ -25,4 +35,4 @@ parser.o: decls.hpp parser.cpp
 
 .PHONY: clean
 clean:
-	rm *.o kale
+	rm -f *.o kale

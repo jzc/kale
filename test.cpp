@@ -1,32 +1,49 @@
 #include <iostream>
 #include <functional>
 
-class Foo {
+class Visitor;
+
+class Abstract {
 public:
-  enum test {a};
+  virtual void accept(Visitor& v) = 0;
+  virtual ~Abstract() {}
 };
 
+class Foo;
+class Bar;
+
+class Visitor {
+public:
+  virtual void operator()(Foo& f) = 0;
+  virtual void operator()(Bar& b) = 0;
+  virtual ~Visitor() {}
+};
+
+
+
+class Foo : public Abstract {
+  void accept(Visitor& v) {
+    v(*this);
+  }
+};
+class Bar : public Abstract {
+  void accept(Visitor& v) {
+    v(*this);
+  }
+};
+
+class Baz : public Visitor {
+  void operator()(Foo&) override {
+    std::cout << "foo\n";
+  }
+  void operator()(Bar&) override {
+    std::cout << "bar\n";
+  }  
+}; 
+
 int main () {
-  
-  Foo::a;
+  Foo f;
+  Abstract& a = f;
+  Baz b;
+  a.accept(b);
 }
-
-// struct Foo {
-//   int n;
-//   Foo() { std::cout << "foo default constructed\n"; }
-//   Foo(int n) : n{n} { std::cout << "foo with " << n << " constructed\n"; }
-//   Foo(const Foo& f) : n{f.n} { std::cout << "foo copy with " << f.n << "\n"; }
-// };
-
-// struct Bar {
-//   Foo f1;
-//   Foo f2{f1};
-//   Bar() : f1{6} {}
-// };
-
-// int main() {
-//   int i = 0;
-//   long l = 1;
-//   std::variant<int, long> x{i};
-//   std::cout << std::holds_alternative<long>(x) << "\n";
-// }
