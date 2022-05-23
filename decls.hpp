@@ -65,7 +65,8 @@ namespace Constants {
   extern const Object if_; //= Object{memory.symbol("if")};
   extern const Object let; //= Object{memory.symbol("let")};
   extern const Object letrec; //= Object{memory.symbol("letrec")};
-  extern const Object quote; // = Object{memory.symbol("quote")};  
+  extern const Object quote; // = Object{memory.symbol("quote")};
+  extern const Object cons;
 }
 
 extern "C" { 
@@ -75,12 +76,14 @@ extern "C" {
   void __div(Object* out, Object* o1, Object* o2);
   void _cons(Object* out, Object* o1, Object* o2);
   void _make_number(Object* out, double d);
+  void _make_symbol(Object* out, const char* data);
   bool is_nil(Object* o1);
   void _print(Object* out, Object* o1);
 }
 
 enum class Token {
-  lparen, rparen, dot, number, symbol, eof
+  lparen, rparen, dot, number, symbol, eof,
+  quote
 };
 
 class Tokenizer {
@@ -299,83 +302,3 @@ struct Discriminator : public FormVisitor {
   }
 };
 
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Verifier.h"
-
-using namespace llvm;
-
-template <typename T>
-struct ScopeStack {
-  std::vector<std::unordered_map<Symbol,T>>
-  scope_stack {};
-  
-  void push_scope() {
-    scope_stack.emplace_back();
-  }
-
-  void pop_scope() {
-    scope_stack.pop_back();
-  }
-
-  const T* get(Symbol s) {
-    if (scope_stack.size() == 0) { return nullptr; }
-    
-    for (auto it = scope_stack.rbegin();
-	 it != scope_stack.rend();
-	 ++it) {
-      auto&& map = *it;
-      auto&& res = map.find(s);
-      if (res != map.end()) {
-	return &res->second;
-      }
-    }
-    return nullptr;
-  }
-
-  void set(Symbol s, const T& v) {
-    scope_stack.back()[s] = v;
-  }
-};
-
-struct Compiler : public FormVisitor {
-
-  using VariableEntry = std::variant<Value*,
-				     Function*>;
-  ScopeStack<VariableEntry> locals {};
-  std::unordered_map<Symbol, VariableEntry> globals {};
-
-  const VariableEntry* lookup(Symbol s);
-  
-  LLVMContext context {};
-  Module module {"test", context};
-  IRBuilder<> builder {context};
-  Function* main;
-  Type* object_type;
-  Function* make_number_function;
-  Function* make_symbol_function;
-  Function* is_nil_function;
-  Value* res;
-
-  Compiler();
-  Value* compile(Form& f) {
-    f.accept(*this);
-    return res;
-  }
-  void operator()(NumberForm& f) override;
-  void operator()(SymbolForm& f) override;
-  void operator()(IfForm& f) override; 
-  void operator()(LetForm& f) override; 
-  void operator()(LetrecForm& f) override; 
-  void operator()(QuoteForm& f) override;
-  void operator()(ApplicationForm& f) override;
-  void print_code();
-};

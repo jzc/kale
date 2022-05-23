@@ -11,7 +11,7 @@ Token Tokenizer::peek() {
   }
   return last_token;
 }
-  
+
 Token Tokenizer::read_token() {
   if (did_peek) {
     did_peek = false;
@@ -26,8 +26,9 @@ Token Tokenizer::read_token() {
   if (is.eof()) { return Token::eof; }
   if (curr_char == '(') { return Token::lparen; }
   if (curr_char == ')') { return Token::rparen; }
+  if (curr_char == '\'') { return Token::quote; }
 
-  // consume chars until we hit eof, space, lparen or rparen,
+  // consume chars until we hit quote, eof, space, lparen or rparen,
   // accumulating the chars in curr_token
   std::string curr_token{static_cast<char>(curr_char)};
   for (;;) {
@@ -35,7 +36,8 @@ Token Tokenizer::read_token() {
     if (is.eof()
 	|| std::isspace(curr_char)
 	|| curr_char == '('
-	|| curr_char == ')') {
+	|| curr_char == ')'
+	|| curr_char == '\'') {
       is.unget();
       break;
     }
@@ -74,6 +76,9 @@ Object Reader::read() {
     return Object{t.number_data};
   case Token::symbol:
     return Object{memory.symbol(t.symbol_data)};
+  case Token::quote:
+    return Object{memory.cons(Constants::quote,
+			      Object{memory.cons(read(), Constants::nil)})};
   case Token::lparen:
     break;
   case Token::rparen:

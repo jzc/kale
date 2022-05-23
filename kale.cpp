@@ -1,11 +1,14 @@
-#include "decls.hpp"
+#include "compiler.hpp"
 
 int main() {
   Compiler compiler;
   Reader reader {std::cin};
-  auto parsed = Parser::parse(reader.read());
+  auto o = reader.read();
+  auto parsed = Parser::parse(o);
+  // std::cout << o << "\n";
   compiler.compile(*parsed);
-  compiler.print_code(); 
+  compiler.builder.CreateRetVoid();
+  compiler.print_code();
     
   // Parser p {std::cin};
   // // Compiler c;

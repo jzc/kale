@@ -2,7 +2,8 @@
 
 declare void @type_error()
 declare void @_print(%Object*, %Object*)
-declare void @_make_number(%Object*, double*)
+declare void @_make_number(%Object*, double)
+declare void @_make_symbol(%Object*, i8*)
 declare void @_cons(%Object*, %Object*, %Object*)
 declare void @_add(%Object*, %Object*, %Object*)
 declare void @_sub(%Object*, %Object*, %Object*)
@@ -10,10 +11,15 @@ declare void @_mult(%Object*, %Object*, %Object*)
 declare void @__div(%Object*, %Object*, %Object*)
 
 define %Object @make_number(double %d) {
-  %p1 = alloca double, align 8
   %pret = alloca %Object, align 16
-  store double %d, double* %p1
-  call void @_make_number(%Object* %pret, double* %p1)
+  call void @_make_number(%Object* %pret, double %d)
+  %ret = load %Object, %Object* %pret
+  ret %Object %ret
+}
+
+define %Object @make_symbol(i8* %s) {
+  %pret = alloca %Object, align 16
+  call void @_make_symbol(%Object* %pret, i8* %s)
   %ret = load %Object, %Object* %pret
   ret %Object %ret
 }

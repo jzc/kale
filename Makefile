@@ -19,10 +19,10 @@ object.o: decls.hpp object.cpp
 parsing.o: decls.hpp parsing.cpp
 	clang++ $(COMPILE_FLAGS) -c parsing.cpp
 
-compiler.o: decls.hpp compiler.cpp
+compiler.o: decls.hpp compiler.hpp
 	clang++ $(COMPILE_FLAGS) -c compiler.cpp
 
-kale: object.o parsing.o compiler.o
+kale: kale.cpp object.o parsing.o compiler.o
 	clang++ $(COMPILE_FLAGS) kale.cpp interface.o object.o parsing.o \
 	compiler.o $(LLVM_LD_FLAGS) -o kale
 

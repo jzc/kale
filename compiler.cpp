@@ -1,4 +1,4 @@
-#include "decls.hpp"
+#include "compiler.hpp"
 #include <unordered_set>
 #include <iterator>
 
@@ -62,7 +62,7 @@ Compiler::Compiler() {
 
       return f;
     };
-
+ 
   auto void_type =
     Type::getVoidTy(context);      
   auto bool_type =
@@ -86,7 +86,7 @@ Compiler::Compiler() {
 		     "main",
 		     nullptr);
   make_symbol_function = 
-    declare_function(FunctionType::get(object_type,{char_ptr_type, i64_type}, false),
+    declare_function(FunctionType::get(object_type,{char_ptr_type}, false),
 		     "make_symbol",nullptr);
   make_number_function =
     declare_function(FunctionType::get(object_type,{double_type}, false),
@@ -99,7 +99,7 @@ Compiler::Compiler() {
   declare_function(binary_op, "sub", "sub");
   declare_function(binary_op, "mult", "mult");
   declare_function(binary_op, "_div", "div");
-  declare_function(binary_op, "cons", "cons");
+  cons_function = declare_function(binary_op, "cons", "cons");
   declare_function(unary_op, "car", "car");
   declare_function(unary_op, "cdr", "cdr");
   declare_function(unary_op, "print", "print");    
@@ -208,7 +208,7 @@ struct ApplicationInjector : public FormVisitor {
     inject(*f.else_form);
   };
   void operator()(LetForm& f) override {
-
+    
   }
   void operator()(LetrecForm& f) override {
 
@@ -302,30 +302,6 @@ void Compiler::operator()(LetrecForm& f) {
   builder.SetInsertPoint(body_insert_block);
   res = compile(*f.body);
   locals.pop_scope();
-  
-  // std::unordered_map<std::string_view, std::pair<Function*, Object>>
-  //   binder_body_map;
-  // for (auto p = bindings; p != Constants::nil; p = p.cdr()) {
-  //   auto&& binding_form = p.car();
-  //   auto&& binder = binding_form.car();
-  //   auto&& args = binding_form.cdr().car();
-  //   auto&& definition = binding_form.cdr().cdr().car();
-
-  // populate arg_set
-  // std::unordered_map<std::string_view> arg_set;
-  // for (auto q = args; args != SC::nil; q = q.cdr()) {
-  // 	arg_set.emplace(*q.car().as_symbol());
-  // }
-
-  // first, collect all the free variables occurring
-  // in every binding.
-
-  // then, inside the bindings, append the free variables as
-  // parameters to each function
-
-  // then, every time one of the new functions is called,
-  // pass the free variable arguments back in as
-  // parameters.
 }
 
 void Compiler::operator()(IfForm& f) {
@@ -371,7 +347,25 @@ void Compiler::operator()(IfForm& f) {
 }
 
 void Compiler::operator()(QuoteForm& f) {
-  throw std::runtime_error("can't handle");
+  std::function<Value*(const Object&)>
+    rec = [&](auto&& o) -> Value* {
+      if (o.is_number()) {
+	NumberForm f {o.as_number()};
+	return compile(f);
+      }
+      if (o.is_symbol()) {
+	auto c = ConstantDataArray::getString(context, *o.as_symbol());
+	auto gv = new GlobalVariable{module,
+				     c->getType(),
+				     true,
+				     GlobalValue::ExternalLinkage, c};
+	auto gvc = builder.CreateBitCast(gv, Type::getInt8PtrTy(context));
+	return builder.CreateCall(make_symbol_function, {gvc});
+      }
+      return builder.CreateCall(cons_function, {rec(o.car()), rec(o.cdr())});
+    };
+  res = rec(f.arg);
+  // throw std::runtime_error("can't handle");
 }
 
 void Compiler::operator()(SymbolForm& f) {

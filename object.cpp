@@ -9,7 +9,8 @@ namespace Constants {
   const Object if_ = Object{memory.symbol("if")};
   const Object let = Object{memory.symbol("let")};
   const Object letrec = Object{memory.symbol("letrec")};
-  const Object quote = Object{memory.symbol("quote")};  
+  const Object quote = Object{memory.symbol("quote")};
+  const Object cons = Object{memory.symbol("cons")};
 }
 
 void type_error() {
@@ -143,6 +144,10 @@ extern "C" {
 
   void _make_number(Object* out, double d) {
     *out = Object{d};
+  }
+
+  void _make_symbol(Object* out, const char* data) {
+    *out = Object{memory.symbol(data)};
   }
 
   bool is_nil(Object* o1) {

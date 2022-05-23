@@ -1,0 +1,1 @@
+(letrec ((f (x) (f (print 'hi)))) (f 'a))
