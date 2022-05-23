@@ -315,7 +315,7 @@ using namespace llvm;
 
 template <typename T>
 struct ScopeStack {
-  std::vector<std::unordered_map<std::string,T>>
+  std::vector<std::unordered_map<Symbol,T>>
   scope_stack {};
   
   void push_scope() {
@@ -326,7 +326,7 @@ struct ScopeStack {
     scope_stack.pop_back();
   }
 
-  const T* get(const std::string& s) {
+  const T* get(Symbol s) {
     if (scope_stack.size() == 0) { return nullptr; }
     
     for (auto it = scope_stack.rbegin();
@@ -341,18 +341,19 @@ struct ScopeStack {
     return nullptr;
   }
 
-  void set(const std::string& s, const T& v) {
+  void set(Symbol s, const T& v) {
     scope_stack.back()[s] = v;
   }
 };
 
 struct Compiler : public FormVisitor {
 
-  using VariableEntry = std::variant<Function*, Value*>;
+  using VariableEntry = std::variant<Value*,
+				     Function*>;
   ScopeStack<VariableEntry> locals {};
-  std::unordered_map<std::string, VariableEntry> globals {};
+  std::unordered_map<Symbol, VariableEntry> globals {};
 
-  const VariableEntry* lookup(const std::string& s);
+  const VariableEntry* lookup(Symbol s);
   
   LLVMContext context {};
   Module module {"test", context};

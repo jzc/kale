@@ -140,11 +140,11 @@ std::unique_ptr<Form> Parser::parse(const Object& o) {
   }
 
   if (car == Constants::letrec) {
-    return Parser::parse_let(o);
+    return Parser::parse_letrec(o);
   }
   
   if (car == Constants::quote) {
-    return Parser::parse_let(o);
+    return Parser::parse_quote(o);
   }
 
   return Parser::parse_application(o);
@@ -179,7 +179,7 @@ std::unique_ptr<Form> Parser::parse_letrec(const Object& o) {
     auto& parameters = binding.cdr().car();
     auto& definition = binding.cdr().cdr().car();
     std::vector<Symbol> parameter_vector;
-    for (auto q = parameters; q != Constants::nil; p = p.cdr()) {
+    for (auto q = parameters; q != Constants::nil; q = q.cdr()) {
       parameter_vector.push_back(q.car().as_symbol());
     }    
     bindings.emplace_back(binder.as_symbol(),
@@ -197,4 +197,10 @@ std::unique_ptr<Form> Parser::parse_application(const Object& o) {
   }
   return std::make_unique<ApplicationForm>(std::move(function),
 					   std::move(argument_vector));
+}
+
+
+std::unique_ptr<Form> Parser::parse_quote(const Object& o) {
+  auto arg = o.cdr().car();
+  return std::make_unique<QuoteForm>(arg);
 }

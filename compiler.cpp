@@ -1,4 +1,6 @@
 #include "decls.hpp"
+#include <unordered_set>
+#include <iterator>
 
 // template <typename T>
 // struct ScopeStack {
@@ -37,7 +39,7 @@
 //   }
 // };
 
-auto Compiler::lookup(const std::string& s) -> const VariableEntry* {
+auto Compiler::lookup(Symbol s) -> const VariableEntry* {
   auto res1 = locals.get(s);
   if (res1) {
     return res1;
@@ -55,7 +57,7 @@ Compiler::Compiler() {
 	Function::Create(type, Function::ExternalLinkage,
 			 llvm_name, module);
       if (var_name)
-	globals[var_name] = f;
+	globals[memory.symbol(var_name)] = f;
       // variables.set(var_name, f);
 
       return f;
@@ -109,15 +111,198 @@ Compiler::Compiler() {
 void Compiler::operator()(LetForm& f) {
   locals.push_scope();
   for (auto&& binding : f.bindings) {
-    locals.set(*binding.binder, compile(*binding.definition));
+    locals.set(binding.binder, compile(*binding.definition));
   }
   res = compile(*f.body);
   locals.pop_scope();
 }
 
+template <typename T>
+void remove(const T& t, std::unordered_set<T>& s) {
+  auto it = s.find(t);
+  if (it != s.end())
+      s.erase(it);
+}
+
+template <typename G>
+struct FreeVarCollector : public FormVisitor {
+  G global_lookup;
+  std::unordered_set<Symbol> res;
+  FreeVarCollector(G global_lookup)
+    : global_lookup{global_lookup}
+  {}
+
+  void collect(Form& f) {
+    f.accept(*this);
+  }
+  void operator()(NumberForm& f) override {
+    // no free variables
+  }
+  void operator()(SymbolForm& f) override {
+    if (!global_lookup(f.symbol))
+      res.insert(f.symbol);
+  }
+  void operator()(IfForm& f) override {
+    collect(*f.cond_form);
+    collect(*f.then_form);
+    collect(*f.else_form);
+  }
+  void operator()(LetForm& f) override {
+    // the semantics of let allow one to refer
+    // to variables in previous bindings, thus,
+    // (let ((binder definition) . rest) body)
+    // is essentially equivalent to
+    // ((lambda (binder) (let rest body)) definition)
+    collect(*f.body);
+    for (auto it = f.bindings.rbegin();
+	 it != f.bindings.rend();
+	 ++it) {
+      auto& binding = *it;
+      remove(binding.binder, res);
+      collect(*binding.definition);
+    }
+  }
+  void operator()(LetrecForm& f) override {
+    collect(*f.body);
+    for (auto&& binding : f.bindings) {
+      collect(*binding.definition);
+      for (auto&& parameter : binding.parameters) {
+	remove(parameter, res);
+      }
+    }
+    for (auto&& binding : f.bindings) {
+      remove(binding.binder, res);
+    }
+  }
+  void operator()(QuoteForm& f) override {
+    //no free variables
+  }
+  void operator()(ApplicationForm& f) override {
+    collect(*f.function_form);
+    for (auto&& arg : f.arg_forms) {
+      collect(*arg);
+    }
+  }
+};
+
+template <typename T>
+struct ApplicationInjector : public FormVisitor {
+  Symbol fn_symbol;
+  T injectee_creator;
+
+  ApplicationInjector(Symbol fn_symbol,
+		      T injectee_creator)
+    : fn_symbol{fn_symbol},
+      injectee_creator{injectee_creator}
+  {}
+  
+  void inject(Form& f) {
+    f.accept(*this);
+  }
+
+  void operator()(NumberForm& f) override {}
+  void operator()(SymbolForm& f) override {}
+  void operator()(IfForm& f) override {
+    inject(*f.cond_form);
+    inject(*f.then_form);
+    inject(*f.else_form);
+  };
+  void operator()(LetForm& f) override {
+
+  }
+  void operator()(LetrecForm& f) override {
+
+  }
+  void operator()(QuoteForm& f) override {}
+  void operator()(ApplicationForm& f) override {
+    for (auto&& arg_form : f.arg_forms) {
+      inject(*arg_form);
+    }
+    auto symbol_form = Discriminator<SymbolForm>::as(*f.function_form);
+    if (symbol_form) {
+      if (symbol_form->symbol == fn_symbol) {
+	for (auto&& injectee : injectee_creator()) {
+	  f.arg_forms.emplace_back(std::move(injectee));
+	}
+      }
+    } else {
+      inject(*f.function_form);
+    }    
+  };
+};
+
 void Compiler::operator()(LetrecForm& f) {
-  throw std::runtime_error("cant handle this");
-  // std::unordered_set<std::string_view> free_vars;
+  std::unique_ptr<Form> placeholder = std::make_unique<NumberForm>(0);    
+  // we want to collect the free vars happening within the
+  // bindings. by swapping out he body of the form with something with
+  // no free variables we can collect the free variables with one
+  // (toplevel) call to collect.  (alternative to swapping: create two
+  // collectors, collect the free vars of the whole letrec form, then
+  // the free vars of the body, then compute set difference)
+  std::swap(f.body, placeholder);
+  FreeVarCollector collector {
+    [&](auto&& s) {
+      return globals.find(s) != globals.end();
+    }
+  };
+  collector.collect(f);
+  std::swap(f.body, placeholder);
+  std::vector<Symbol> fvs {collector.res.begin(), collector.res.end()};
+
+ 
+  auto&& injectee_creator = [&](){
+    std::vector<std::unique_ptr<Form>> injectees;
+    for (auto&& fv : fvs) {
+      injectees.emplace_back(std::make_unique<SymbolForm>(fv));
+    }
+    return injectees;
+  };
+
+  if (fvs.size() > 0) {
+    // inject the free variables into each binding definition and body
+    for (auto&& binding : f.bindings) {
+      ApplicationInjector ai{binding.binder, injectee_creator};
+      ai.inject(*binding.definition);
+      ai.inject(*f.body);
+      // also inject fvs into parameters
+      for (auto&& fv : fvs) {
+	binding.parameters.emplace_back(fv);
+      }
+    }
+  }
+  auto body_insert_block = builder.GetInsertBlock();
+  locals.push_scope();
+  std::vector<Function*> fns;
+  for (auto&& binding : f.bindings) {
+    std::vector<Type*> parameter_types {binding.parameters.size(), object_type};
+    auto type = FunctionType::get(object_type, parameter_types, false);
+    Function* fn = Function::Create(type, Function::ExternalLinkage,
+				    *binding.binder, module);
+    
+    locals.set(binding.binder, fn);
+    fns.push_back(fn);
+  }
+
+  // Recursively compile each function
+  auto binding_it = f.bindings.begin();
+  for (auto&& fn : fns) {
+    auto&& binding = *binding_it++;
+    auto it = binding.parameters.begin();
+    locals.push_scope();
+    fn->args().end();
+    for (auto&& arg_value : fn->args()) {
+      locals.set(*it++, &arg_value);
+    }
+    auto block = BasicBlock::Create(context, "entry", fn);
+    builder.SetInsertPoint(block);
+    builder.CreateRet(compile(*binding.definition));
+    locals.pop_scope();
+  }
+
+  builder.SetInsertPoint(body_insert_block);
+  res = compile(*f.body);
+  locals.pop_scope();
+  
   // std::unordered_map<std::string_view, std::pair<Function*, Object>>
   //   binder_body_map;
   // for (auto p = bindings; p != Constants::nil; p = p.cdr()) {
@@ -126,21 +311,21 @@ void Compiler::operator()(LetrecForm& f) {
   //   auto&& args = binding_form.cdr().car();
   //   auto&& definition = binding_form.cdr().cdr().car();
 
-    // populate arg_set
-    // std::unordered_map<std::string_view> arg_set;
-    // for (auto q = args; args != SC::nil; q = q.cdr()) {
-    // 	arg_set.emplace(*q.car().as_symbol());
-    // }
+  // populate arg_set
+  // std::unordered_map<std::string_view> arg_set;
+  // for (auto q = args; args != SC::nil; q = q.cdr()) {
+  // 	arg_set.emplace(*q.car().as_symbol());
+  // }
 
-    // first, collect all the free variables occurring
-    // in every binding.
+  // first, collect all the free variables occurring
+  // in every binding.
 
-    // then, inside the bindings, append the free variables as
-    // parameters to each function
+  // then, inside the bindings, append the free variables as
+  // parameters to each function
 
-    // then, every time one of the new functions is called,
-    // pass the free variable arguments back in as
-    // parameters.
+  // then, every time one of the new functions is called,
+  // pass the free variable arguments back in as
+  // parameters.
 }
 
 void Compiler::operator()(IfForm& f) {
@@ -190,7 +375,7 @@ void Compiler::operator()(QuoteForm& f) {
 }
 
 void Compiler::operator()(SymbolForm& f) {
-  auto&& it = lookup(*f.symbol);
+  auto&& it = lookup(f.symbol);
   if (!it) { throw std::runtime_error("couldn't find variable");}
       
   if (std::holds_alternative<Value*>(*it)) {
@@ -208,7 +393,7 @@ void Compiler::operator()(NumberForm& f) {
 void Compiler::operator()(ApplicationForm& f) {
   SymbolForm* symbol_form = Discriminator<SymbolForm>::as(*f.function_form);
   if (symbol_form) {
-    auto&& it = lookup(*symbol_form->symbol);
+    auto&& it = lookup(symbol_form->symbol);
     if (!it) { throw std::runtime_error("variable not found"); }
     if (std::holds_alternative<Function*>(*it)) {
       auto&& callee = std::get<Function*>(*it);
