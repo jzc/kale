@@ -37,7 +37,8 @@ public:
   friend bool operator==(const Object& o1, const Object& o2);
   friend bool operator!=(const Object& o1, const Object& o2)
   { return !(o1 == o2); }
-  friend std::ostream& operator<<(std::ostream& os, Object o); 
+  friend std::ostream& operator<<(std::ostream& os, Object o);
+  bool equal(const Object& rhs) const;
 };
 
 struct Cell {
@@ -67,6 +68,7 @@ namespace Constants {
   extern const Object letrec; //= Object{memory.symbol("letrec")};
   extern const Object quote; // = Object{memory.symbol("quote")};
   extern const Object cons;
+  extern const Object t;
 }
 
 extern "C" { 

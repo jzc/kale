@@ -11,6 +11,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
 
+
 using namespace llvm;
 
 template <typename T>
@@ -48,8 +49,7 @@ struct ScopeStack {
 
 struct Compiler : public FormVisitor {
 
-  using VariableEntry = std::variant<Value*,
-				     Function*>;
+  using VariableEntry = std::variant<Value*, Function*>;
   ScopeStack<VariableEntry> locals {};
   std::unordered_map<Symbol, VariableEntry> globals {};
 
@@ -58,6 +58,10 @@ struct Compiler : public FormVisitor {
   LLVMContext context {};
   Module module {"test", context};
   IRBuilder<> builder {context};
+
+  // PassBuilder pass_builder {};
+  // ModulePassManager module_pm;
+  
   Function* main;
   Type* object_type;
   Function* make_number_function;

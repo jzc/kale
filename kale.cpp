@@ -7,7 +7,6 @@ int main() {
   auto parsed = Parser::parse(o);
   // std::cout << o << "\n";
   compiler.compile(*parsed);
-  compiler.builder.CreateRetVoid();
   compiler.print_code();
     
   // Parser p {std::cin};

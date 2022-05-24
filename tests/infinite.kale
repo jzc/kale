@@ -1,1 +1,7 @@
-(letrec ((f (x) (f (print 'hi)))) (f 'a))
+(letrec
+    ((f ()
+	(let ((_ (print 'hi)))
+	  (if 0
+	      0
+	    (f)))))
+  (f))

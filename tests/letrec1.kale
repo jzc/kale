@@ -1,0 +1,5 @@
+(letrec ((f ()
+	    (let ((_ (print 1))
+		  (_ (print 2)))
+	      'nil)))
+  (f))

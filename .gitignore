@@ -1,5 +1,7 @@
 llvm-test
 test
 kale
+a.out
 *.o
 *.org
+test.cpp

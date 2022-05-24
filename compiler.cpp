@@ -1,43 +1,14 @@
 #include "compiler.hpp"
 #include <unordered_set>
 #include <iterator>
-
-// template <typename T>
-// struct ScopeStack {
-//   std::vector<std::unordered_map<std::string,T>>
-//   scope_stack {};
-
-//   // ScopeStack() {
-//   //   push_scope();
-//   // }
-
-//   void push_scope() {
-//     scope_stack.emplace_back();
-//   }
-
-//   void pop_scope() {
-//     scope_stack.pop_back();
-//   }
-
-//   const T* get(const std::string& s) {
-//     if (scope_stack.size() == 0) { return nullptr; }
-    
-//     for (auto it = scope_stack.rbegin();
-// 	 it != scope_stack.rend();
-// 	 ++it) {
-//       auto&& map = *it;
-//       auto&& res = map.find(s);
-//       if (res != map.end()) {
-// 	return &res->second;
-//       }
-//     }
-//     return nullptr;
-//   }
-
-//   void set(const std::string& s, const T& v) {
-//     scope_stack.back()[s] = v;
-//   }
-// };
+#include <algorithm>
+#include "llvm/Pass.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Analysis/OptimizationRemarkEmitter.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassBuilder.h"
+// #include "llvm/Transforms/Scalar/TailRecursionElimination.h"
 
 auto Compiler::lookup(Symbol s) -> const VariableEntry* {
   auto res1 = locals.get(s);
@@ -105,7 +76,9 @@ Compiler::Compiler() {
   declare_function(unary_op, "print", "print");    
     
   auto block = BasicBlock::Create(context, "entry", main);
-  builder.SetInsertPoint(block);    
+  builder.SetInsertPoint(block);
+  // manager.add(createTailCallEliminationPass());
+  // manager.doInitialization();
 }
 
 void Compiler::operator()(LetForm& f) {
@@ -208,10 +181,30 @@ struct ApplicationInjector : public FormVisitor {
     inject(*f.else_form);
   };
   void operator()(LetForm& f) override {
-    
+    for (auto&& binding : f.bindings) {
+      inject(*binding.definition);
+      if (binding.binder == fn_symbol) {
+	return;
+      }
+    }
+    inject(*f.body);
   }
   void operator()(LetrecForm& f) override {
-
+    // check if fn_symbol is bound by
+    // any of the bindings
+    auto&& pred = [&](auto&& binding) {
+      return binding.binder == fn_symbol;
+    };
+    if (std::any_of(f.bindings.begin(),
+		    f.bindings.end(),
+		    pred)) {
+      return;
+    }
+    // not bound by any of the bindings,
+    // inject into the definitions
+    for (auto&& binding : f.bindings) {
+      inject(*binding.definition);
+    }    
   }
   void operator()(QuoteForm& f) override {}
   void operator()(ApplicationForm& f) override {
@@ -408,11 +401,34 @@ void Compiler::operator()(ApplicationForm& f) {
     throw std::runtime_error("cant handle this");
   }
   // auto& car = form.car();
-
   // auto&& res = lookup(*car.as_symbol());
-  
 }
 
 void Compiler::print_code() {
+  builder.CreateRetVoid();
+
+  // Create the analysis managers.
+  LoopAnalysisManager LAM;
+  FunctionAnalysisManager FAM;
+  CGSCCAnalysisManager CGAM;
+  ModuleAnalysisManager MAM;
+
+  // Create the new pass manager builder.
+  // Take a look at the PassBuilder constructor parameters for more
+  // customization, e.g. specifying a TargetMachine or various debugging
+  // options.
+  PassBuilder PB;
+
+  // Register all the basic analyses with the managers.
+  PB.registerModuleAnalyses(MAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerLoopAnalyses(LAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+  // Create the pass manager.
+  // This one corresponds to a typical -O2 optimization pipeline.
+  ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
+  MPM.run(module, MAM);
   module.print(outs(), nullptr);
 }

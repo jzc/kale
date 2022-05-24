@@ -68,6 +68,20 @@ bool operator==(const Object& o1, const Object& o2) {
   return o1.tag == o2.tag && o1.data == o2.data;
 }
 
+bool Object::equal(const Object& rhs) const {
+    if (tag != rhs.tag) {
+      return false;
+    }
+    switch (tag) {
+    case tag_number:
+    case tag_symbol:
+      return data == rhs.data;
+    case tag_cons:
+      return car().equal(rhs.car())
+	&& cdr().equal(rhs.cdr());
+    }
+  }
+
 Cons Memory::cons(Object car, Object cdr) {
   conses.emplace_back(car, cdr);
   return &conses.back();
@@ -157,5 +171,9 @@ extern "C" {
   void _print(Object* out, Object* o1) {
     std::cout << *o1 << "\n";
     *out = Constants::nil;
+  }
+
+  void _equal(Object* out, const Object* o1, const Object* o2) {
+    *out = o1->equal(*o2) ? Constants::t : Constants::nil;
   }
 }
