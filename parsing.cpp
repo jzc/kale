@@ -152,6 +152,10 @@ std::unique_ptr<Form> Parser::parse(const Object& o) {
     return Parser::parse_quote(o);
   }
 
+  if (car == Constants::lambda) {
+    return Parser::parse_lambda(o);
+  }
+
   return Parser::parse_application(o);
 }
 
@@ -208,4 +212,16 @@ std::unique_ptr<Form> Parser::parse_application(const Object& o) {
 std::unique_ptr<Form> Parser::parse_quote(const Object& o) {
   auto arg = o.cdr().car();
   return std::make_unique<QuoteForm>(arg);
+}
+
+
+std::unique_ptr<Form> Parser::parse_lambda(const Object& o) {
+  auto& parameters = o.cdr().car();
+  auto& body = o.cdr().cdr().car();
+  std::vector<Symbol> parameter_vector;
+  for (auto p = parameters; !p.is_nil(); p = p.cdr()) {
+    parameter_vector.emplace_back(p.car().as_symbol());
+  }
+  return std::make_unique<LambdaForm>(std::move(parameter_vector),
+				      Parser::parse(body));
 }

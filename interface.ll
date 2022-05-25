@@ -1,6 +1,5 @@
 %Object = type { i64, i64 }
 
-declare void @type_error()
 declare void @_print(%Object*, %Object*)
 declare void @_make_number(%Object*, double)
 declare void @_make_symbol(%Object*, i8*)
@@ -9,6 +8,44 @@ declare void @_add(%Object*, %Object*, %Object*)
 declare void @_sub(%Object*, %Object*, %Object*)
 declare void @_mult(%Object*, %Object*, %Object*)
 declare void @__div(%Object*, %Object*, %Object*)
+declare i1 @_is_nil(%Object*)
+declare i8* @_get_code(%Object*, i32)
+declare %Object* @_get_fvs(%Object*)
+declare void @_create_closure(%Object*, i8*, %Object*)
+
+define %Object @get_fv(%Object* %fvs, i32 %i) {
+  %ptr = getelementptr %Object, %Object* %fvs, i32 %i
+  %ret = load %Object, %Object* %ptr
+  ret %Object %ret
+}
+
+define %Object @create_closure(i8* %fn_ptr, %Object* %fvs) {
+  %pret = alloca %Object, align 16
+  call void @_create_closure(%Object* %pret, i8* %fn_ptr, %Object* %fvs)
+  %ret = load %Object, %Object* %pret
+  ret %Object %ret
+}
+
+define %Object* @get_fvs(%Object %o1) {
+  %p1 = alloca %Object, align 16
+  store %Object %o1, %Object* %p1
+  %ret = call %Object* @_get_fvs(%Object* %p1)
+  ret %Object* %ret
+}
+
+define i8* @get_code(%Object %o1, i32 %n) {
+  %p1 = alloca %Object, align 16
+  store %Object %o1, %Object* %p1
+  %ret = call i8* @_get_code(%Object* %p1, i32 %n)
+  ret i8* %ret
+}
+
+define i1 @is_nil(%Object %o1) {
+  %p1 = alloca %Object, align 16
+  store %Object %o1, %Object* %p1
+  %ret = call i1 @_is_nil(%Object* %p1)
+  ret i1 %ret
+}
 
 define %Object @make_number(double %d) {
   %pret = alloca %Object, align 16

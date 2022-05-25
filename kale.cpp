@@ -1,7 +1,14 @@
 #include "compiler.hpp"
 
-int main() {
-  Compiler compiler;
+int main(int argc, char** argv) {
+  auto optimize = false;
+  auto end = argv+argc;
+  const std::string opt_flag = "-O";
+  if (std::find(argv, end, opt_flag) != end) {
+    optimize = true;
+  }
+  
+  Compiler compiler{optimize};
   Reader reader {std::cin};
   auto o = reader.read();
   auto parsed = Parser::parse(o);

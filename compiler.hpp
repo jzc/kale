@@ -14,6 +14,7 @@
 
 using namespace llvm;
 
+// idea: give RAII interface for push/popping scope
 template <typename T>
 struct ScopeStack {
   std::vector<std::unordered_map<Symbol,T>>
@@ -68,9 +69,14 @@ struct Compiler : public FormVisitor {
   Function* make_symbol_function;
   Function* is_nil_function;
   Function* cons_function;
+  Function* get_code_function;
+  Function* get_fvs_function;
+  Function* get_fv_function;
+  Function* create_closure_function;
   Value* res;
+  bool optimize;
 
-  Compiler();
+  Compiler(bool optimize);
   Value* compile(Form& f) {
     f.accept(*this);
     return res;
@@ -82,5 +88,10 @@ struct Compiler : public FormVisitor {
   void operator()(LetrecForm& f) override; 
   void operator()(QuoteForm& f) override;
   void operator()(ApplicationForm& f) override;
+  void operator()(LambdaForm& f) override;
   void print_code();
+
+  std::unordered_map<int, Function*>
+  call_closure_cache;
+  Function* call_closure_function(int n);
 };

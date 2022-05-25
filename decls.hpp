@@ -8,7 +8,9 @@
 #include <variant>
 
 struct Cell;
+struct ClosureData;
 using Cons = Cell*;
+using Closure = ClosureData*;
 using Symbol = const std::string*;
 
 class Object {
@@ -16,7 +18,8 @@ private:
   enum Tag {
     tag_number,
     tag_symbol,
-    tag_cons
+    tag_cons,
+    tag_closure,
   };
   
   std::uint64_t tag;
@@ -25,12 +28,15 @@ public:
   explicit Object(double d);
   explicit Object(Symbol s);
   explicit Object(Cons c);
+  explicit Object(Closure c);
   bool is_number() const;
   bool is_symbol() const;
   bool is_cons() const;
+  bool is_closure() const;
   double as_number() const;
   Symbol as_symbol() const;
   Cons as_cons() const;
+  Closure as_closure() const;
   Object& car() const;
   Object& cdr() const;
   bool is_nil() const;
@@ -49,6 +55,12 @@ struct Cell {
   {}
 };
 
+struct ClosureData {
+  std::vector<Object> fvs;
+  void* code;
+  int n_params;
+};
+
 struct Memory {
   std::list<Cell> conses {};
   std::list<std::string> symbol_storage {};
@@ -62,13 +74,14 @@ struct Memory {
 extern Memory memory;
 
 namespace Constants {
-  extern const Object nil; // = Object{memory.symbol("nil")};
-  extern const Object if_; //= Object{memory.symbol("if")};
-  extern const Object let; //= Object{memory.symbol("let")};
-  extern const Object letrec; //= Object{memory.symbol("letrec")};
-  extern const Object quote; // = Object{memory.symbol("quote")};
+  extern const Object nil; 
+  extern const Object if_; 
+  extern const Object let; 
+  extern const Object letrec;
+  extern const Object quote; 
   extern const Object cons;
   extern const Object t;
+  extern const Object lambda;
 }
 
 extern "C" { 
@@ -79,8 +92,11 @@ extern "C" {
   void _cons(Object* out, Object* o1, Object* o2);
   void _make_number(Object* out, double d);
   void _make_symbol(Object* out, const char* data);
-  bool is_nil(Object* o1);
+  bool _is_nil(Object* o1);
   void _print(Object* out, Object* o1);
+  void _equal(Object* out, Object* o1, Object *o2);
+  void* _get_code(Object* o1, int n);
+  Object* _get_fvs(Object* o1);
 }
 
 enum class Token {
@@ -124,16 +140,18 @@ class LetForm;
 class LetrecForm;
 class QuoteForm;
 class ApplicationForm;
+class LambdaForm;
 
 class FormVisitor {
 public:
-  virtual void operator()(NumberForm& f) = 0;
-  virtual void operator()(SymbolForm& f) = 0;
-  virtual void operator()(IfForm& f) = 0;
-  virtual void operator()(LetForm& f) = 0;
-  virtual void operator()(LetrecForm& f) = 0;
-  virtual void operator()(QuoteForm& f) = 0;
-  virtual void operator()(ApplicationForm& f) = 0;
+  virtual void operator()(NumberForm&) = 0;
+  virtual void operator()(SymbolForm&) = 0;
+  virtual void operator()(IfForm&) = 0;
+  virtual void operator()(LetForm&) = 0;
+  virtual void operator()(LetrecForm&) = 0;
+  virtual void operator()(QuoteForm&) = 0;
+  virtual void operator()(ApplicationForm&) = 0;
+  virtual void operator()(LambdaForm&) = 0;
   virtual ~FormVisitor() {};
 };
 
@@ -160,9 +178,9 @@ public:
   std::unique_ptr<Form> cond_form;
   std::unique_ptr<Form> then_form;
   std::unique_ptr<Form> else_form;
-  IfForm(std::unique_ptr<Form> cond_form,
-	 std::unique_ptr<Form> then_form,
-	 std::unique_ptr<Form> else_form)
+  IfForm(std::unique_ptr<Form>&& cond_form,
+	 std::unique_ptr<Form>&& then_form,
+	 std::unique_ptr<Form>&& else_form)
     : cond_form{std::move(cond_form)},
       then_form{std::move(then_form)},
       else_form{std::move(else_form)}
@@ -176,7 +194,7 @@ struct VariableBinding {
   Symbol binder;
   std::unique_ptr<Form> definition;
   VariableBinding(Symbol binder,
-		  std::unique_ptr<Form> definition)
+		  std::unique_ptr<Form>&& definition)
     : binder{binder},
       definition{std::move(definition)}
   {}
@@ -186,8 +204,8 @@ class LetForm : public Form {
 public:
   std::vector<VariableBinding> bindings;
   std::unique_ptr<Form> body;
-  LetForm(std::vector<VariableBinding> bindings,
-	  std::unique_ptr<Form> body)
+  LetForm(std::vector<VariableBinding>&& bindings,
+	  std::unique_ptr<Form>&& body)
     : bindings{std::move(bindings)},
       body{std::move(body)}
   {}
@@ -201,8 +219,8 @@ struct FunctionBinding {
   std::vector<Symbol> parameters;
   std::unique_ptr<Form> definition;
   FunctionBinding(Symbol binder,
-		  std::vector<Symbol> parameters,
-		  std::unique_ptr<Form> definition)
+		  std::vector<Symbol>&& parameters,
+		  std::unique_ptr<Form>&& definition)
     : binder{binder},
       parameters{std::move(parameters)},
       definition{std::move(definition)}
@@ -213,8 +231,8 @@ class LetrecForm : public Form {
 public:
   std::vector<FunctionBinding> bindings;
   std::unique_ptr<Form> body;
-  LetrecForm(std::vector<FunctionBinding> bindings,
-	     std::unique_ptr<Form> body)
+  LetrecForm(std::vector<FunctionBinding>&& bindings,
+	     std::unique_ptr<Form>&& body)
     : bindings{std::move(bindings)},
       body{std::move(body)}
   {}
@@ -236,10 +254,24 @@ class ApplicationForm : public Form {
 public:
   std::unique_ptr<Form> function_form;
   std::vector<std::unique_ptr<Form>> arg_forms;
-  ApplicationForm(std::unique_ptr<Form> function_form,
-		  std::vector<std::unique_ptr<Form>> arg_forms)
+  ApplicationForm(std::unique_ptr<Form>&& function_form,
+		  std::vector<std::unique_ptr<Form>>&& arg_forms)
     : function_form{std::move(function_form)},
       arg_forms{std::move(arg_forms)}
+  {}
+  void accept(FormVisitor& visitor) override {
+    visitor(*this);
+  }
+};
+
+class LambdaForm : public Form {
+public:
+  std::vector<Symbol> parameters;
+  std::unique_ptr<Form> body;
+  LambdaForm(std::vector<Symbol>&& parameters,
+	     std::unique_ptr<Form>&& body)
+    : parameters{std::move(parameters)},
+      body{std::move(body)}
   {}
   void accept(FormVisitor& visitor) override {
     visitor(*this);
@@ -253,54 +285,5 @@ struct Parser {
   static std::unique_ptr<Form> parse_letrec(const Object& o);
   static std::unique_ptr<Form> parse_quote(const Object& o);
   static std::unique_ptr<Form> parse_application(const Object& o);
+  static std::unique_ptr<Form> parse_lambda(const Object& o);
 };
-
-#include <type_traits>
-
-template <typename T>
-struct Discriminator : public FormVisitor {
-  T* ref {nullptr};
-
-  static T* as(Form& f) {
-    Discriminator<T> d;
-    f.accept(d);
-    return d.ref;
-  }
-
-  void operator()(NumberForm& f) override {
-    if constexpr (std::is_same<T, NumberForm>()) {
-      ref = &f;
-    }
-  }
-  void operator()(SymbolForm& f) override {
-    if constexpr (std::is_same<T, SymbolForm>()) {
-      ref = &f;
-    }
-  }
-  void operator()(IfForm& f) override {
-    if constexpr (std::is_same<T, IfForm>()) {
-      ref = &f;
-    }
-  }
-  void operator()(LetForm& f) override {
-    if constexpr (std::is_same<T, LetForm>()) {
-      ref = &f;
-    }
-  }
-  void operator()(LetrecForm& f) override {
-    if constexpr (std::is_same<T, LetrecForm>()) {
-      ref = &f;
-    }
-  }
-  void operator()(QuoteForm& f) override {
-    if constexpr (std::is_same<T, QuoteForm>()) {
-      ref = &f;
-    }
-  }
-  void operator()(ApplicationForm& f) override {
-    if constexpr (std::is_same<T, ApplicationForm>()) {
-      ref = &f;
-    }
-  }
-};
-

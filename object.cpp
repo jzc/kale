@@ -11,6 +11,7 @@ namespace Constants {
   const Object letrec = Object{memory.symbol("letrec")};
   const Object quote = Object{memory.symbol("quote")};
   const Object cons = Object{memory.symbol("cons")};
+  const Object lambda = Object{memory.symbol("lambda")};
 }
 
 void type_error() {
@@ -40,11 +41,18 @@ Object::Object(Cons c)
     data{bitcast<std::uint64_t>(c)}
 {}
 
+Object::Object(Closure c)
+  : tag{tag_closure},
+    data{bitcast<std::uint64_t>(c)}
+{}
+
 bool Object::is_number() const { return tag == tag_number; }
 
 bool Object::is_symbol() const { return tag == tag_symbol; }
 
 bool Object::is_cons() const { return tag == tag_cons; }
+
+bool Object::is_closure() const { return tag == tag_closure; }
 
 double Object::as_number() const {
   if (!is_number()) type_error();
@@ -58,6 +66,11 @@ Cons Object::as_cons() const {
   if (!is_cons()) type_error();
   return bitcast<Cons>(data);
 }
+Closure Object::as_closure() const {
+  if (!is_closure()) type_error();
+  return bitcast<Closure>(data);
+}
+
 Object& Object::car() const { return as_cons()->car; }
 
 Object& Object::cdr() const { return as_cons()->cdr; }
@@ -69,18 +82,19 @@ bool operator==(const Object& o1, const Object& o2) {
 }
 
 bool Object::equal(const Object& rhs) const {
-    if (tag != rhs.tag) {
-      return false;
-    }
-    switch (tag) {
-    case tag_number:
-    case tag_symbol:
-      return data == rhs.data;
-    case tag_cons:
-      return car().equal(rhs.car())
-	&& cdr().equal(rhs.cdr());
-    }
+  if (tag != rhs.tag) {
+    return false;
   }
+  switch (tag) {
+  case tag_number:
+  case tag_symbol:
+    return data == rhs.data;
+  default:
+  // case tag_cons:
+    return car().equal(rhs.car())
+      && cdr().equal(rhs.cdr());
+  }
+}
 
 Cons Memory::cons(Object car, Object cdr) {
   conses.emplace_back(car, cdr);
@@ -164,16 +178,26 @@ extern "C" {
     *out = Object{memory.symbol(data)};
   }
 
-  bool is_nil(Object* o1) {
+  bool _is_nil(Object* o1) {
     return o1->is_nil();
   }
 
   void _print(Object* out, Object* o1) {
     std::cout << *o1 << "\n";
-    *out = Constants::nil;
+    *out = *o1;
   }
 
-  void _equal(Object* out, const Object* o1, const Object* o2) {
+  void _equal(Object* out, Object* o1, Object* o2) {
     *out = o1->equal(*o2) ? Constants::t : Constants::nil;
+  }
+
+  void* _get_code(Object* o1, int n) {
+    auto&& cl = *o1->as_closure();
+    if (cl.n_params != n) type_error();
+    return cl.code;
+  }
+
+  Object* _get_fvs(Object* o1) {
+    return o1->as_closure()->fvs.data();
   }
 }
