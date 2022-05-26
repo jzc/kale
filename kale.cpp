@@ -27,32 +27,21 @@ int main(int argc, char** argv) {
   InitializeNativeTargetAsmParser();
   Triple triple {sys::getProcessTriple()};
   JITTargetMachineBuilder jtmb{triple};
-  ConcurrentIRCompiler irc{jtmb};
-  
+  ConcurrentIRCompiler irc{jtmb};  
   auto epc = ExitOnErr(SelfExecutorProcessControl::Create());
-  // if (auto E = epc.takeError()) {
-  //   return 1;
-  // }
-  // ExecutionSession es {std::move(*epc)};
-  // auto&& dylib = es.createBareJITDylib("main");
-  // ObjectLinkingLayer ol{es};
-  // IRCompileLayer ircl {es, ol, std::make_unique<decltype(irc)>(irc)};
-
   auto jit =
-    ExitOnErr(LLJITBuilder()
-	      .setExecutorProcessControl(std::move(epc))
-	      .setJITTargetMachineBuilder(std::move(jtmb))
-	      .setObjectLinkingLayerCreator([](auto&& es, auto&& triple) {
-		return std::make_unique<ObjectLinkingLayer>(es);
-	      })
-	      .setCompileFunctionCreator([](auto&& jtmb) {
-		return std::make_unique<ConcurrentIRCompiler>(jtmb);
-	      })
-	      .create());
+    ExitOnErr
+    (LLJITBuilder()
+     .setExecutorProcessControl(std::move(epc))
+     .setJITTargetMachineBuilder(std::move(jtmb))
+     .setObjectLinkingLayerCreator([](auto&& es, auto&& triple) {
+       return std::make_unique<ObjectLinkingLayer>(es);
+     })
+     .setCompileFunctionCreator([](auto&& jtmb) {
+       return std::make_unique<ConcurrentIRCompiler>(jtmb);
+     })
+     .create());
   
-  
-  
-
   Compiler compiler{optimize};
   Reader reader {std::cin};
   auto o = reader.read();

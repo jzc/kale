@@ -77,10 +77,11 @@ struct Compiler : public FormVisitor {
   Function* get_fvs_function;
   Function* get_fv_function;
   Function* create_closure_function;
-  Value* res;
   bool optimize;
 
   Compiler(bool optimize);
+  
+  Value* res;
   Value* compile(Form& f) {
     f.accept(*this);
     return res;
@@ -95,6 +96,8 @@ struct Compiler : public FormVisitor {
   void operator()(LambdaForm& f) override;
   void print_code();
 
+  Value* constant_i32(int n);
+  
   std::unordered_map<int, Function*>
   call_closure_cache;
   Function* call_closure_function(int n);

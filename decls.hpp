@@ -56,9 +56,15 @@ struct Cell {
 };
 
 struct ClosureData {
-  std::vector<Object> fvs;
   void* code;
+  std::vector<Object> fvs;
   int n_params;
+  ClosureData(void* code,
+	      std::vector<Object>&& fvs,
+	      int n_params)
+    : code{code}, fvs{std::move(fvs)},
+      n_params{n_params}
+  {}
 };
 
 struct Memory {
@@ -66,9 +72,13 @@ struct Memory {
   std::list<std::string> symbol_storage {};
   std::unordered_map<std::string, const std::string*>
   symbol_lookup {};
+  std::list<ClosureData> closures {};
 
   Cons cons(Object car, Object cdr);
-  Symbol symbol(const std::string& s); 
+  Symbol symbol(const std::string& s);
+  Closure closure(void* code,
+		  Object* fvs, std::int32_t n_fvs,
+		  std::int32_t n_params);
 };
 
 extern Memory memory;

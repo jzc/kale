@@ -1,0 +1,8 @@
+(letrec ((map (f lst)
+	      (if lst
+		  (cons (f (car lst))
+			(map f (cdr lst)))
+		'nil)))
+  (let ((lst (print '(1 2 3 4 5 6)))
+	(square (lambda (x) (mult x x))))
+    (print (map square lst))))

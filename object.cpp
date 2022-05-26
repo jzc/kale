@@ -111,6 +111,15 @@ Symbol Memory::symbol(const std::string& s) {
   return it->second;
 }
 
+Closure Memory::closure(void* code,
+			Object* fvs, std::int32_t n_fvs,
+			std::int32_t n_params) {
+  closures.emplace_back(code,
+			std::vector<Object>(fvs, fvs+n_fvs),
+			n_params);
+  return &closures.back();  
+}
+
 std::ostream& operator<<(std::ostream& os, Object o) {
   switch (o.tag) {
   case Object::tag_number:
@@ -171,6 +180,14 @@ extern "C" {
     *out = Object{memory.cons(*o1, *o2)};
   }
 
+  void _car(Object* out, Object* o1) {
+    *out = o1->car();
+  }
+
+  void _cdr(Object* out, Object* o1) {
+    *out = o1->cdr();
+  }
+
   void _make_number(Object* out, double d) {
     *out = Object{d};
   }
@@ -192,7 +209,7 @@ extern "C" {
     *out = o1->equal(*o2) ? Constants::t : Constants::nil;
   }
 
-  void* _get_code(Object* o1, int n) {
+  void* _get_code(Object* o1, std::int32_t n) {
     auto&& cl = *o1->as_closure();
     if (cl.n_params != n) type_error();
     return cl.code;
@@ -202,7 +219,9 @@ extern "C" {
     return o1->as_closure()->fvs.data();
   }
 
-  void _create_closure(Object* out, void* code, Object* fvs) {
-
+  void _create_closure(Object* out, void* code,
+		       Object* fvs, std::int32_t n_fvs,
+		       std::int32_t n_params) {
+    *out = Object{memory.closure(code, fvs, n_fvs, n_params)};
   }
 }

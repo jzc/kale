@@ -4,6 +4,8 @@ declare void @_print(%Object*, %Object*)
 declare void @_make_number(%Object*, double)
 declare void @_make_symbol(%Object*, i8*)
 declare void @_cons(%Object*, %Object*, %Object*)
+declare void @_car(%Object*, %Object*)
+declare void @_cdr(%Object*, %Object*)
 declare void @_add(%Object*, %Object*, %Object*)
 declare void @_sub(%Object*, %Object*, %Object*)
 declare void @_mult(%Object*, %Object*, %Object*)
@@ -11,7 +13,25 @@ declare void @__div(%Object*, %Object*, %Object*)
 declare i1 @_is_nil(%Object*)
 declare i8* @_get_code(%Object*, i32)
 declare %Object* @_get_fvs(%Object*)
-declare void @_create_closure(%Object*, i8*, %Object*)
+declare void @_create_closure(%Object*, i8*, %Object*, i32, i32)
+
+define %Object @car(%Object %o1) {
+  %p1 = alloca %Object, align 16
+  %pret = alloca %Object, align 16
+  store %Object %o1, %Object* %p1
+  call void @_car(%Object* %pret, %Object* %p1)
+  %ret = load %Object, %Object* %pret
+  ret %Object %ret  
+}
+
+define %Object @cdr(%Object %o1) {
+  %p1 = alloca %Object, align 16
+  %pret = alloca %Object, align 16
+  store %Object %o1, %Object* %p1
+  call void @_cdr(%Object* %pret, %Object* %p1)
+  %ret = load %Object, %Object* %pret
+  ret %Object %ret  
+}
 
 define %Object @get_fv(%Object* %fvs, i32 %i) {
   %ptr = getelementptr %Object, %Object* %fvs, i32 %i
@@ -19,9 +39,13 @@ define %Object @get_fv(%Object* %fvs, i32 %i) {
   ret %Object %ret
 }
 
-define %Object @create_closure(i8* %fn_ptr, %Object* %fvs) {
+define %Object @create_closure(i8* %fn_ptr,
+       	                       %Object* %fvs, i32 %n_fvs,
+			       i32 %n_params) {
   %pret = alloca %Object, align 16
-  call void @_create_closure(%Object* %pret, i8* %fn_ptr, %Object* %fvs)
+  call void @_create_closure(%Object* %pret, i8* %fn_ptr,
+                             %Object* %fvs, i32 %n_fvs,
+			     i32 %n_params)
   %ret = load %Object, %Object* %pret
   ret %Object %ret
 }

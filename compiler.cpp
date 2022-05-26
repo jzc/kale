@@ -134,7 +134,11 @@ Compiler::Compiler(bool optimize)
     declare_function(FunctionType::get(object_type, {object_ptr_type, i32_type}, false),
 		     "get_fv", nullptr);
   create_closure_function =
-    declare_function(FunctionType::get(object_type, {char_ptr_type, object_ptr_type}, false),
+    declare_function(FunctionType::get(object_type,
+				       {char_ptr_type,
+					object_ptr_type, i32_type,
+					i32_type},
+				       false),
 		     "create_closure", nullptr);
 
   declare_function(binary_op, "add", "add");
@@ -384,6 +388,10 @@ void Compiler::operator()(LetrecForm& f) {
   locals.pop_scope();
 }
 
+Value* Compiler::constant_i32(int n) {
+  return ConstantInt::get(Type::getInt32Ty(context), n);
+}
+
 void Compiler::operator()(LambdaForm& f) {
   // Get the free vars of the body
   FreeVarCollector collector {
@@ -417,7 +425,7 @@ void Compiler::operator()(LambdaForm& f) {
   locals.push_scope();
   // Set up the free vars to fetch the value from the fv array
   for (int i = 0; i < fvs.size(); ++i) {
-    auto idx = ConstantInt::get(Type::getInt32Ty(context), i);				
+    auto idx = constant_i32(i);
     auto fv_val = builder.CreateCall(get_fv_function, {fn->getArg(0), idx});
     locals.set(fvs[i], fv_val);
   }
@@ -435,11 +443,10 @@ void Compiler::operator()(LambdaForm& f) {
   // Now that we've compiled the body, we need to create
   // an array of the free vars and then we can create a closure
   auto arr =
-    builder.CreateAlloca(object_type,
-			 ConstantInt::get(Type::getInt32Ty(context),
-					  fvs.size()));
+    builder.CreateAlloca(object_type, constant_i32(fvs.size()));
+
   for (int i = 0; i < fvs.size(); ++i) {
-    Value* idx = ConstantInt::get(Type::getInt32Ty(context), i);
+    Value* idx = constant_i32(i);
     auto ptr = builder.CreateGEP(object_type, arr, {idx});
     auto res = lookup(fvs[i]);
     if (!res) throw std::runtime_error("");
@@ -453,7 +460,10 @@ void Compiler::operator()(LambdaForm& f) {
   }
 
   auto fn_ptr = builder.CreateBitCast(fn, Type::getInt8PtrTy(context));
-  res = builder.CreateCall(create_closure_function, {fn_ptr, arr});
+  res = builder.CreateCall(create_closure_function,
+			   {fn_ptr,
+			    arr, constant_i32(fvs.size()),
+			    constant_i32(f.parameters.size())});
 }
 
 void Compiler::operator()(IfForm& f) {
@@ -620,28 +630,26 @@ Function* Compiler::call_closure_function(int n) {
     Function::Create(this_fn_type, Function::ExternalLinkage,
 		     {"call_closure", std::to_string(n)}, module);
   auto block = BasicBlock::Create(context, "entry", fn);
-  builder.SetInsertPoint(block);
-  auto code =
-    builder.CreateCall(get_code_function,
-		       {fn->getArg(0), ConstantInt::get(Type::getInt32Ty(context), n)});
-  auto fvs =
-    builder.CreateCall(get_fvs_function, {fn->getArg(0)});
+  builder.SetInsertPoint(block); 
 
+  // get_code returns an i8*, cast it to a pointer to a
+  // Object (Object*, Object, ..., Object)
+  auto code =
+    builder.CreateCall(get_code_function, {fn->getArg(0), constant_i32(n)});
   auto fnptr_parameter_types = std::vector(static_cast<unsigned>(n+1), object_type);
   fnptr_parameter_types[0] = PointerType::getUnqual(object_type);
-
   auto fn_type = FunctionType::get(object_type, fnptr_parameter_types, false);
   auto fnptr_type = PointerType::getUnqual(fn_type);
   Value* fnptr = builder.CreateBitCast(code, fnptr_type);
+
+  // Now set up the arguments to call the code
+  auto fvs =
+    builder.CreateCall(get_fvs_function, {fn->getArg(0)});
   std::vector<Value*> arguments;
   arguments.push_back(fvs);
   for (auto it = fn->arg_begin()+1; it != fn->arg_end(); ++it) {
     arguments.push_back(it);
   }
-    // Value* idx = ConstantInt::get(Type::getInt32Ty(context), i);
-    // auto ptr = builder.CreateGEP(object_type, fvs, {idx});
-    // auto fv = builder.CreateLoad(object_type, ptr);
-    // arguments.push_back(fv);
 
   auto ret = builder.CreateCall(fn_type, fnptr, arguments);
   builder.CreateRet(ret);    
