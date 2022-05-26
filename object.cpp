@@ -12,6 +12,7 @@ namespace Constants {
   const Object quote = Object{memory.symbol("quote")};
   const Object cons = Object{memory.symbol("cons")};
   const Object lambda = Object{memory.symbol("lambda")};
+  const Object t = Object{memory.symbol("t")};
 }
 
 void type_error() {
@@ -199,5 +200,9 @@ extern "C" {
 
   Object* _get_fvs(Object* o1) {
     return o1->as_closure()->fvs.data();
+  }
+
+  void _create_closure(Object* out, void* code, Object* fvs) {
+
   }
 }

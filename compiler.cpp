@@ -603,28 +603,6 @@ void Compiler::print_code() {
   module.print(outs(), nullptr);
 }
 
-
-/* Closures/lambdas work like this: first, similarly to the letrec
-   case, close over all the free variables and add them as free
-   variables to the parameters of the lambda. then, generate code for
-   the body of the lambda like a normal function, giving us a function
-   pointer. Now, we create a closure object (via a runtime function)
-   by supplying a pointer, the number of parameters the function has
-   (not counting the free variables), and the values of the free
-   variables.
-
-   To call a closure, we call a runtime function which takes an int,
-   signifying the number of arguments we are about to call the closure with,
-   and returns the code pointer if the number of arguments matches
-   the number of parameters of the closure; otherwise, the runtime aborts.
-   Thus, if we receive the pointer, we can then safely bitcast it
-   to the correct number of arguments, and then call it like a
-   regular function. Note that the code for the lambda will be compiled as
-   a non varargs function - it probably is undefined behavior
-   to cast the function we receive into a varags function and
-   try to call it. Thus, we'll need to generate code for every
-   closure call for a given number of arguments.
- */
 Function* Compiler::call_closure_function(int n) {
   if (auto res = call_closure_cache.find(n);
       res != call_closure_cache.end()) {

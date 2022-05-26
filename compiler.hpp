@@ -56,8 +56,12 @@ struct Compiler : public FormVisitor {
 
   const VariableEntry* lookup(Symbol s);
   
-  LLVMContext context {};
-  Module module {"test", context};
+  std::unique_ptr<LLVMContext> context_ptr
+    {std::make_unique<LLVMContext>()};
+  LLVMContext& context {*context_ptr};
+  std::unique_ptr<Module> module_ptr
+    {std::make_unique<Module>("test", context)};
+  Module& module {*module_ptr};
   IRBuilder<> builder {context};
 
   // PassBuilder pass_builder {};

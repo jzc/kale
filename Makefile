@@ -11,8 +11,8 @@ ifdef LLVM_LIB
 endif
 
 LLVM_CXX_FLAGS!=$(LLVM_CONFIG) --cxxflags | sed 's/-fno-exceptions//'
-LLVM_LD_FLAGS!=$(LLVM_CONFIG) --ldflags --system-libs --libs core native passes
-COMPILE_FLAGS:=-g -flto $(LLVM_CXX_FLAGS)
+LLVM_LD_FLAGS!=$(LLVM_CONFIG) --ldflags --system-libs --libs core native passes orcjit
+COMPILE_FLAGS:=-g $(LLVM_CXX_FLAGS)
 CXX:=clang++
 
 all: interface.o object.o parsing.o compiler.o kale
@@ -35,7 +35,7 @@ compiler.o: decls.hpp compiler.hpp compiler.cpp
 kale: kale.cpp object.o parsing.o compiler.o
 # note: put the compiled file before the linker flags, otherwise a
 # linker error occurs
-	$(CXX) $(COMPILE_FLAGS) $(RPATH) \
+	$(CXX) $(COMPILE_FLAGS) $(RPATH) -rdynamic \
 	kale.cpp object.o parsing.o compiler.o \
 	$(LLVM_LD_FLAGS) -o kale
 

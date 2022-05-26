@@ -1,7 +1,7 @@
 (letrec
     ((f ()
 	(let ((_ (print 'hi)))
-	  (if 0
+	  (if 'nil
 	      0
 	    (f)))))
   (f))
